@@ -1,0 +1,7 @@
+Changes
+lib/Gcode/ParseSpeed.pm
+Makefile.PL
+MANIFEST			This list of files
+README
+t/00-compile.t
+t/00.load.t
