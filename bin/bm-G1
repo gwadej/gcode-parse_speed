@@ -4,6 +4,7 @@ use strict;
 use warnings;
 use 5.010;
 
+#use List::MoreUtils qw/firstidx/;
 use Benchmark qw/cmpthese/;
 
 my $num_matches = 3;
@@ -13,8 +14,10 @@ cmpthese( 100, {
     naive =>        \&naive_impl,
     'non-greedy' => \&non_greedy_impl,
     'greedy' =>     \&greedy_impl,
+    args     =>     \&args_impl,
     'substr' =>     \&substr_impl,
     'index' =>      \&index_impl,
+#    'split' =>      \&split_impl,
 });
 
 sub naive_impl
@@ -50,6 +53,19 @@ sub greedy_impl
     return;
 }
 
+sub args_impl
+{
+    my ($line, $count) = ('', 0);
+    for(@lines)
+    {
+        next unless /^G1(?![\d.]).*?Z([\d.]+)/;
+        next unless 2.0 <= $1 && $1 < 3.0;
+        ($line, $count) = ($_, $count+1);
+    }
+    say STDERR "Error args ($count)" unless $count == $num_matches;
+    return;
+}
+
 sub substr_impl
 {
     my ($line, $count, $match, $pos) = ('', 0, '', 0);
@@ -64,8 +80,7 @@ sub substr_impl
         next unless substr( $_, $pos+4, 2 ) eq '00';
         $match = substr( $_, $pos+6, 1);
         next if '0' le $match && $match le '9';
-        $line = $_;
-        ++$count;
+        ($line, $count) = ($_, $count+1);
     }
     say STDERR "Error substr ($count)" unless $count == $num_matches;
     return;
@@ -85,9 +100,27 @@ sub index_impl
         next unless substr( $_, $pos+4, 2 ) eq '00';
         $match = substr( $_, $pos+6, 1);
         next if '0' le $match && $match le '9';
-        $line = $_;
-        ++$count;
+        ($line, $count) = ($_, $count+1);
     }
     say STDERR "Error index ($count)" unless $count == $num_matches;
+    return;
+}
+
+sub split_impl
+{
+    my ($line, $count, $match, $pos) = ('', 0, '', 0);
+    my @chars;
+    for(@lines)
+    {
+        @chars = split '', $_;
+        next if $chars[0] ne 'G' || $chars[1] ne '1' || ('0' le $chars[2] && $chars[2] le '9');
+        $pos = firstidx { $_ eq 'Z' } @chars;
+        next if -1 == $pos || $chars[$pos+1] ne '2' || $chars[$pos+2] ne '.'
+                           || ($chars[$pos+3] lt '0' || '9' lt $chars[$pos+3])
+                           || ($chars[$pos+4] ne '0' || $chars[$pos+5] ne '0');
+        next if '0' le $chars[$pos+6] && $chars[$pos+6] le '9';
+        ($line, $count) = ($_, $count+1);
+    }
+    say STDERR "Error split ($count)" unless $count == $num_matches;
     return;
 }

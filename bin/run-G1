@@ -71,8 +71,7 @@ sub substr_impl
         next unless substr( $_, $pos+4, 2 ) eq '00';
         $match = substr( $_, $pos+6, 1);
         next if '0' le $match && $match le '9';
-        $line = $_;
-        ++$count;
+        ($line, $count) = ($_, $count+1);
     }
     say STDERR "Error substr ($count)" unless $count == $num_matches;
     return;
@@ -92,8 +91,7 @@ sub index_impl
         next unless substr( $_, $pos+4, 2 ) eq '00';
         $match = substr( $_, $pos+6, 1);
         next if '0' le $match && $match le '9';
-        $line = $_;
-        ++$count;
+        ($line, $count) = ($_, $count+1);
     }
     say STDERR "Error index ($count)" unless $count == $num_matches;
     return;
