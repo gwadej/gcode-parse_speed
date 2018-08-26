@@ -4,25 +4,18 @@ use strict;
 use warnings;
 use 5.010;
 
-use Dumbbench;
+use Benchmark qw/cmpthese/;
 
 my $num_matches = 167;
 
 my @lines = do { open my $fh, '<', 'target/rose.gcode' or die; <$fh> };
-my $bench = Dumbbench->new(
-  target_rel_precision => 0.005, # seek ~0.5%
-  initial_runs         => 100,    # the higher the more reliable
-);
-$bench->add_instances(
-    Dumbbench::Instance::PerlSub->new(name => 'naive',      code => \&naive_impl),
-    Dumbbench::Instance::PerlSub->new(name => 'non-greedy', code => \&non_greedy_impl),
-    Dumbbench::Instance::PerlSub->new(name => 'greedy',     code => \&greedy_impl),
-    Dumbbench::Instance::PerlSub->new(name => 'substr',     code => \&substr_impl),
-    Dumbbench::Instance::PerlSub->new(name => 'index',      code => \&index_impl),
-);
-
-$bench->run;
-$bench->report;
+cmpthese( 100, {
+    naive        => \&naive_impl,
+    'non-greedy' => \&non_greedy_impl,
+    'greedy'     => \&greedy_impl,
+    'substr'     => \&substr_impl,
+    'index'      => \&index_impl,
+});
 
 sub naive_impl
 {

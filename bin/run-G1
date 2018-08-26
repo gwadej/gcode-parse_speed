@@ -11,70 +11,90 @@ my $num_matches = 3;
 my @lines = do { open my $fh, '<', 'target/rose.gcode' or die; <$fh> };
 my $bench = Dumbbench->new(
   target_rel_precision => 0.005, # seek ~0.5%
-  initial_runs         => 50,    # the higher the more reliable
+  initial_runs         => 100,    # the higher the more reliable
 );
 $bench->add_instances(
-    Dumbbench::Instance::PerlSub->new(name => 'naive', code => sub {
-        my ($line, $count) = ('', 0);
-        for(@lines)
-        {
-            ($line, $count) = ($_, $count+1) if /^G1\b.*Z2\.\d00/;
-        }
-        say STDERR "Error naive ($count)" unless $count == $num_matches;
-    }),
-    Dumbbench::Instance::PerlSub->new(name => 'non-greedy', code => sub {
-        my ($line, $count) = ('', 0);
-        for(@lines)
-        {
-            ($line, $count) = ($_, $count+1) if /^G1(?![\d.]).*?Z2\.\d00(?!\d)/;
-        }
-        say STDERR "Error non-greedy ($count)" unless $count == $num_matches;
-    }),
-    Dumbbench::Instance::PerlSub->new(name => 'greedy', code => sub {
-        my ($line, $count) = ('', 0);
-        for(@lines)
-        {
-            ($line, $count) = ($_, $count+1) if /^G1(?![\d.]).*Z2\.\d00(?!\d)/;
-        }
-        say STDERR "Error greedy ($count)" unless $count == $num_matches;
-    }),
-    Dumbbench::Instance::PerlSub->new(name => 'substr', code => sub {
-        my ($line, $count, $match, $pos) = ('', 0, '', 0);
-        for(@lines)
-        {
-            next unless substr( $_, 0, 2) eq 'G1';
-            $match = substr( $_, 2, 1 );
-            next if '0' le $match && $match le '9';
-            next if -1 == ($pos = index( $_, 'Z2.', 3 ));
-            $match = substr( $_, $pos+3, 1);
-            next unless '0' le $match && $match le '9';
-            next unless substr( $_, $pos+4, 2 ) eq '00';
-            $match = substr( $_, $pos+6, 1);
-            next if '0' le $match && $match le '9';
-            $line = $_;
-            ++$count;
-        }
-        say STDERR "Error substr ($count)" unless $count == $num_matches;
-    }),
-    Dumbbench::Instance::PerlSub->new(name => 'index', code => sub {
-        my ($line, $count, $match, $pos) = ('', 0, '', 0);
-        for(@lines)
-        {
-            next unless 0 == index( $_, 'G1' );
-            $match = substr( $_, 2, 1 );
-            next if '0' le $match && $match le '9';
-            next if -1 == ($pos = index( $_, 'Z2.', 3 ));
-            $match = substr( $_, $pos+3, 1);
-            next unless '0' le $match && $match le '9';
-            next unless substr( $_, $pos+4, 2 ) eq '00';
-            $match = substr( $_, $pos+6, 1);
-            next if '0' le $match && $match le '9';
-            $line = $_;
-            ++$count;
-        }
-        say STDERR "Error index ($count)" unless $count == $num_matches;
-    }),
+    Dumbbench::Instance::PerlSub->new(name => 'naive',      code => \&naive_impl),
+    Dumbbench::Instance::PerlSub->new(name => 'non-greedy', code => \&non_greedy_impl),
+    Dumbbench::Instance::PerlSub->new(name => 'greedy',     code => \&greedy_impl),
+    Dumbbench::Instance::PerlSub->new(name => 'substr',     code => \&substr_impl),
+    Dumbbench::Instance::PerlSub->new(name => 'index',      code => \&index_impl),
 );
 
 $bench->run;
 $bench->report;
+
+sub naive_impl
+{
+    my ($line, $count) = ('', 0);
+    for(@lines)
+    {
+        ($line, $count) = ($_, $count+1) if /^G1\b.*Z2\.\d00/;
+    }
+    say STDERR "Error naive ($count)" unless $count == $num_matches;
+    return;
+}
+
+sub non_greedy_impl
+{
+    my ($line, $count) = ('', 0);
+    for(@lines)
+    {
+        ($line, $count) = ($_, $count+1) if /^G1(?![\d.]).*?Z2\.\d00(?!\d)/;
+    }
+    say STDERR "Error non-greedy ($count)" unless $count == $num_matches;
+    return;
+}
+
+sub greedy_impl
+{
+    my ($line, $count) = ('', 0);
+    for(@lines)
+    {
+        ($line, $count) = ($_, $count+1) if /^G1(?![\d.]).*Z2\.\d00(?!\d)/;
+    }
+    say STDERR "Error greedy ($count)" unless $count == $num_matches;
+    return;
+}
+
+sub substr_impl
+{
+    my ($line, $count, $match, $pos) = ('', 0, '', 0);
+    for(@lines)
+    {
+        next unless substr( $_, 0, 2) eq 'G1';
+        $match = substr( $_, 2, 1 );
+        next if '0' le $match && $match le '9';
+        next if -1 == ($pos = index( $_, 'Z2.', 3 ));
+        $match = substr( $_, $pos+3, 1);
+        next unless '0' le $match && $match le '9';
+        next unless substr( $_, $pos+4, 2 ) eq '00';
+        $match = substr( $_, $pos+6, 1);
+        next if '0' le $match && $match le '9';
+        $line = $_;
+        ++$count;
+    }
+    say STDERR "Error substr ($count)" unless $count == $num_matches;
+    return;
+}
+
+sub index_impl
+{
+    my ($line, $count, $match, $pos) = ('', 0, '', 0);
+    for(@lines)
+    {
+        next unless 0 == index( $_, 'G1' );
+        $match = substr( $_, 2, 1 );
+        next if '0' le $match && $match le '9';
+        next if -1 == ($pos = index( $_, 'Z2.', 3 ));
+        $match = substr( $_, $pos+3, 1);
+        next unless '0' le $match && $match le '9';
+        next unless substr( $_, $pos+4, 2 ) eq '00';
+        $match = substr( $_, $pos+6, 1);
+        next if '0' le $match && $match le '9';
+        $line = $_;
+        ++$count;
+    }
+    say STDERR "Error index ($count)" unless $count == $num_matches;
+    return;
+}
