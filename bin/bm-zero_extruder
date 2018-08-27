@@ -6,10 +6,12 @@ use 5.010;
 
 use Benchmark qw/cmpthese/;
 
-my $num_matches = 6755;
+my $num_matches; # = 6755;
+my $file = shift || 'target/rose.gcode' ;
 
-my @lines = do { open my $fh, '<', 'target/rose.gcode' or die; <$fh> };
-cmpthese( 100, {
+my @lines = do { open my $fh, '<', $file or die; <$fh> };
+my $iterations = @lines < 1000 ? 50_000 : 100;
+cmpthese( $iterations, {
     naive =>        \&naive_impl,
     'non-greedy' => \&non_greedy_impl,
     'greedy' =>     \&greedy_impl,
@@ -25,7 +27,7 @@ sub naive_impl
     {
         ($line, $count) = ($_, $count+1) if /^G92\s*E0$/;
     }
-    say STDERR "Error naive ($count)" unless $count == $num_matches;
+    say STDERR "Error naive ($count)" if defined $num_matches && $count != $num_matches;
     return;
 }
 
@@ -36,7 +38,7 @@ sub non_greedy_impl
     {
         ($line, $count) = ($_, $count+1) if /^G92\s*?E0\s*?$/;
     }
-    say STDERR "Error non-greedy ($count)" unless $count == $num_matches;
+    say STDERR "Error non-greedy ($count)" if defined $num_matches && $count != $num_matches;
     return;
 }
 
@@ -47,7 +49,7 @@ sub greedy_impl
     {
         ($line, $count) = ($_, $count+1) if /^G92\s*E0\s*$/;
     }
-    say STDERR "Error greedy ($count)" unless $count == $num_matches;
+    say STDERR "Error greedy ($count)" if defined $num_matches && $count != $num_matches;
     return;
 }
 
@@ -64,7 +66,7 @@ sub substr_impl
         next if $match eq '.' || '0' le $match && $match le '9';
         ($line, $count) = ($_, $count+1);
     }
-    say STDERR "Error substr ($count)" unless $count == $num_matches;
+    say STDERR "Error substr ($count)" if defined $num_matches && $count != $num_matches;
     return;
 }
 
@@ -81,7 +83,7 @@ sub index_impl
         next if $match eq '.' || '0' le $match && $match le '9';
         ($line, $count) = ($_, $count+1);
     }
-    say STDERR "Error index ($count)" unless $count == $num_matches;
+    say STDERR "Error index ($count)" if defined $num_matches && $count != $num_matches;
     return;
 }
 
@@ -92,6 +94,6 @@ sub exact_match_impl
     {
         ($line, $count) = ($_, $count+1) if $_ eq "G92 E0\n";
     }
-    say STDERR "Error naive ($count)" unless $count == $num_matches;
+    say STDERR "Error naive ($count)" if defined $num_matches && $count != $num_matches;
     return;
 }
