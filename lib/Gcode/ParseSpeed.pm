@@ -2,13 +2,44 @@ package Gcode::ParseSpeed;
 
 use warnings;
 use strict;
-use 5.010;
+use 5.022;
 
 our $VERSION = '0.01';
 
-# Other recommended modules (uncomment to use):
-#  use autodie;
-#  use IO::Prompt;
+sub run
+{
+    my ( $opts, $tests, $count ) = @_;
+    my $iterations = $opts->{iter} || ($count < 1000 ? 50_000 : 100);
+
+    if($opts->{db})
+    {
+        require Dumbbench;
+        my $precision = $opts->{prec} || ($count < 1000 ? 0.01 : 0.005);
+        my $bench = Dumbbench->new(
+            target_rel_precision => $precision,
+            initial_runs         => $iterations,    # the higher the more reliable
+        );
+        $bench->add_instances(
+            map {
+                Dumbbench::Instance::PerlSub->new( name => $_, code => $tests->{$_} )
+            } sort keys %{$tests}
+        );
+        $bench->run;
+        $bench->report;
+    }
+    elsif($opts->{dbm})
+    {
+        require Benchmark::Dumb;
+        my $precision = $opts->{prec} || ($count < 1000 ? 0.01 : 0.005);
+        Benchmark::Dumb::cmpthese( $iterations+$precision, $tests );
+    }
+    else
+    {
+        require Benchmark;
+        Benchmark::cmpthese( $iterations, $tests );
+    }
+    return;
+}
 
 
 1;

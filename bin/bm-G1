@@ -4,12 +4,13 @@ use strict;
 use warnings;
 use 5.022;
 use Getopt::Long;
+use FindBin;
+use lib "$FindBin::Bin/../lib";
+use Gcode::ParseSpeed;
 
 #use List::MoreUtils qw/firstidx/;
 
-my %opts = (
-);
-
+my %opts;
 GetOptions(
     \%opts,
     'bm', 'db', 'dbm',
@@ -22,7 +23,6 @@ my $num_matches = $opts{matches};
 
 my $file = shift || 'target/rose.gcode' ;
 my @lines = do { open my $fh, '<', $file or die; <$fh> };
-my $iterations = $opts{iter} || (@lines < 1000 ? 20_000 : 100);
 my %tests = (
     naive        => \&naive_impl,
     'non-greedy' => \&non_greedy_impl,
@@ -35,34 +35,7 @@ my %tests = (
 #    'split' =>      \&split_impl,
 );
 
-if($opts{db})
-{
-    require Dumbbench;
-    my $precision = $opts{prec} || (@lines < 1000 ? 0.01 : 0.005);
-    my $bench = Dumbbench->new(
-        target_rel_precision => $precision,
-        initial_runs         => $iterations,    # the higher the more reliable
-    );
-    $bench->add_instances(
-        map {
-            Dumbbench::Instance::PerlSub->new( name => $_, code => $tests{$_} )
-        } sort keys %tests
-    );
-    $bench->run;
-    $bench->report;
-}
-elsif($opts{dbm})
-{
-    require Benchmark::Dumb;
-    my $precision = $opts{prec} || (@lines < 1000 ? 0.01 : 0.005);
-    Benchmark::Dumb::cmpthese( $iterations+$precision, \%tests );
-}
-else
-{
-    require Benchmark;
-    Benchmark::cmpthese( $iterations, \%tests );
-}
-
+Gcode::ParseSpeed::run( \%opts, \%tests, scalar(@lines) );
 
 sub naive_impl
 {
