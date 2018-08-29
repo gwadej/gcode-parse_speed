@@ -2,22 +2,34 @@
 
 use strict;
 use warnings;
-use 5.010;
+use 5.022;
+use Getopt::Long;
+use FindBin;
+use lib "$FindBin::Bin/../lib";
+use Gcode::ParseSpeed;
 
-use Benchmark qw/cmpthese/;
+my %opts;
+GetOptions(
+    \%opts,
+    'bm', 'db', 'dbm',
+    'matches=i',
+    'prec=f',
+    'iter=i',
+) or die "Unknown option\n";
 
-my $num_matches; # = 167;
+my $num_matches = $opts{matches}; # = 167;
+
 my $file = shift || 'target/rose.gcode' ;
-
 my @lines = do { open my $fh, '<', $file or die; <$fh> };
-my $iterations = @lines < 1000 ? 50_000 : 100;
-cmpthese( $iterations, {
+my %tests = (
     naive        => \&naive_impl,
     'non-greedy' => \&non_greedy_impl,
     'greedy'     => \&greedy_impl,
     'substr'     => \&substr_impl,
     'index'      => \&index_impl,
-});
+);
+
+Gcode::ParseSpeed::run( \%opts, \%tests, scalar(@lines) );
 
 sub naive_impl
 {

@@ -19,7 +19,7 @@ GetOptions(
     'iter=i',
 ) or die "Unknown option\n";
 
-my $num_matches = $opts{matches};
+my $num_matches = $opts{matches}; # = 3;
 
 my $file = shift || 'target/rose.gcode' ;
 my @lines = do { open my $fh, '<', $file or die; <$fh> };
