@@ -19,12 +19,15 @@ GetOptions(
 
 my $num_matches; # = 6755;
 
+my $regex = qr/^G92\s*E0\s*$/;
+
 my $file = shift || 'target/rose.gcode' ;
 my @lines = do { open my $fh, '<', $file or die; <$fh> };
 my %tests = (
     naive        => \&naive_impl,
     'non-greedy' => \&non_greedy_impl,
     'greedy'     => \&greedy_impl,
+    'comp_regex' => \&comp_regex_impl,
     'substr'     => \&substr_impl,
     'index'      => \&index_impl,
     exact        => \&exact_match_impl,
@@ -62,6 +65,17 @@ sub greedy_impl
         ($line, $count) = ($_, $count+1) if /^G92\s*E0\s*$/;
     }
     say STDERR "Error greedy ($count)" if defined $num_matches && $count != $num_matches;
+    return;
+}
+
+sub comp_regex_impl
+{
+    my ($line, $count) = ('', 0);
+    for(@lines)
+    {
+        ($line, $count) = ($_, $count+1) if $_ =~ $regex;
+    }
+    say STDERR "Error comp regex ($count)" if defined $num_matches && $count != $num_matches;
     return;
 }
 
