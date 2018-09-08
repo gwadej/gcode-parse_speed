@@ -1,0 +1,146 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use 5.022;
+use Getopt::Long;
+use FindBin;
+use lib "$FindBin::Bin/../lib";
+use Gcode::ParseSpeed;
+use Parse::RecDescent;
+
+my %opts;
+GetOptions(
+    \%opts,
+    'bm', 'db', 'dbm',
+    'matches=i',
+    'prec=f',
+    'iter=i',
+) or die "Unknown option\n";
+
+my $num_matches = $opts{matches}; # = 167;
+
+my $regex = qr/^G[01](?![\d.]).*Z([23])\./;
+
+my $grammar = q{
+    startrule: double_zmove
+
+    double_zmove: move igpos(?) z23 ignore(?) { $item[3] }
+
+    move: /G[01](?![\\d.])/
+
+    igpos: /[-+XY\\d\\s.]+/
+    z23: /Z[-+]?([23])[\\d.]+/ { $1 }
+    ignore: /[-+EF\\d.]+/
+};
+my $rdp = Parse::RecDescent->new( $grammar ) or die "Bad grammar\n";
+
+my $file = shift || 'target/rose.gcode' ;
+my @lines = do { open my $fh, '<', $file or die; <$fh> };
+my %tests = (
+    naive        => \&naive_impl,
+    'non-greedy' => \&non_greedy_impl,
+    'greedy'     => \&greedy_impl,
+    'comp_regex' => \&comp_regex_impl,
+    'substr'     => \&substr_impl,
+    'index'      => \&index_impl,
+    'recdescent' => \&recdescent_impl,
+);
+
+Gcode::ParseSpeed::run( \%opts, \%tests, scalar(@lines) );
+
+sub naive_impl
+{
+    my ($line, $count1, $count2) = ('', 0, 0);
+    for(@lines)
+    {
+        ($line, $count1) = ($_, $count1+1) if /^G[01]\b.*Z2\./;
+        ($line, $count2) = ($_, $count2+1) if /^G[01]\b.*Z3\./;
+    }
+    say STDERR "Error naive ($count1)" if defined $num_matches && $count1 != $num_matches;
+    return;
+}
+
+sub non_greedy_impl
+{
+    my ($line, $count1, $count2) = ('', 0, 0);
+    for(@lines)
+    {
+        next unless /^G[01](?![\d.]).*?Z([23])\./;
+        $line = ($1 eq '2' ? (++$count1, $_) : (++$count2, $_));
+    }
+    say STDERR "Error non-greedy ($count1)" if defined $num_matches && $count1 != $num_matches;
+    return;
+}
+
+sub greedy_impl
+{
+    my ($line, $count1, $count2) = ('', 0, 0);
+    for(@lines)
+    {
+        next unless /^G[01](?![\d.]).*Z([23])\./;
+        $line = ($1 eq '2' ? (++$count1, $_) : (++$count2, $_));
+    }
+    say STDERR "Error greedy ($count1)" if defined $num_matches && $count1 != $num_matches;
+    return;
+}
+
+sub comp_regex_impl
+{
+    my ($line, $count1, $count2) = ('', 0, 0);
+    for(@lines)
+    {
+        next unless $_ =~ $regex;
+        $line = ($1 eq '2' ? (++$count1, $_) : (++$count2, $_));
+    }
+    say STDERR "Error comp regex ($count1)" if defined $num_matches && $count1 != $num_matches;
+    return;
+}
+
+sub substr_impl
+{
+    my ($line, $count1, $count2, $match, $pos) = ('', 0, 0, '', 0);
+    for(@lines)
+    {
+        $match = substr( $_, 0, 2 );
+        next unless $match eq 'G1' || $match eq 'G0';
+        $match = substr( $_, 2, 1 );
+        next if '0' le $match && $match le '9';
+        next if -1 == ($pos = index( $_, 'Z', 3 ));
+        $match = substr( $_, $pos+1, 1 );
+        next unless $match eq '2' || $match eq '3';
+        $line = ($match eq '2' ? (++$count1, $_) : (++$count2, $_));
+    }
+    say STDERR "Error substr ($count1)" if defined $num_matches && $count1 != $num_matches;
+    return;
+}
+
+sub index_impl
+{
+    my ($line, $count1, $count2, $match, $pos) = ('', 0, 0, '', 0);
+    for(@lines)
+    {
+        $match = substr( $_, 0, 2 );
+        next unless $match eq 'G1' || $match eq 'G0';
+        $match = substr( $_, 2, 1 );
+        next if '0' le $match && $match le '9';
+        next if -1 == ($pos = index( $_, 'Z', 3 ));
+        $match = substr( $_, $pos+1, 1 );
+        next unless $match eq '2' || $match eq '3';
+        $line = ($match eq '2' ? (++$count1, $_) : (++$count2, $_));
+    }
+    say STDERR "Error index ($count1)" if defined $num_matches && $count1 != $num_matches;
+    return;
+}
+
+sub recdescent_impl
+{
+    my ($line, $count1, $count2, $match) = ('', 0, 0);
+    for(@lines)
+    {
+        next unless defined ($match = $rdp->startrule( $_ ));
+        $line = ($match eq '2' ? (++$count1, $_) : (++$count2, $_));
+    }
+    say STDERR "Error RecDescent Parser ($count1)" if defined $num_matches && $count1 != $num_matches;
+    return;
+}
