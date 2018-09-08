@@ -7,7 +7,6 @@ use Getopt::Long;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 use Gcode::ParseSpeed;
-use Parse::RecDescent;
 
 my %opts;
 GetOptions(
@@ -22,19 +21,6 @@ my $num_matches = $opts{matches}; # = 167;
 
 my $regex = qr/^G[01](?![\d.]).*Z([23])\./;
 
-my $grammar = q{
-    startrule: double_zmove
-
-    double_zmove: move igpos(?) z23 ignore(?) { $item[3] }
-
-    move: /G[01](?![\\d.])/
-
-    igpos: /[-+XY\\d\\s.]+/
-    z23: /Z[-+]?([23])[\\d.]+/ { $1 }
-    ignore: /[-+EF\\d.]+/
-};
-my $rdp = Parse::RecDescent->new( $grammar ) or die "Bad grammar\n";
-
 my $file = shift || 'target/rose.gcode' ;
 my @lines = do { open my $fh, '<', $file or die; <$fh> };
 my %tests = (
@@ -44,7 +30,6 @@ my %tests = (
     'comp_regex' => \&comp_regex_impl,
     'substr'     => \&substr_impl,
     'index'      => \&index_impl,
-    'recdescent' => \&recdescent_impl,
 );
 
 Gcode::ParseSpeed::run( \%opts, \%tests, scalar(@lines) );
@@ -52,10 +37,11 @@ Gcode::ParseSpeed::run( \%opts, \%tests, scalar(@lines) );
 sub naive_impl
 {
     my ($line, $count1, $count2) = ('', 0, 0);
+    my $state = 0;
     for(@lines)
     {
-        ($line, $count1) = ($_, $count1+1) if /^G[01]\b.*Z2\./;
-        ($line, $count2) = ($_, $count2+1) if /^G[01]\b.*Z3\./;
+        ($line, $count1, $state) = ($_, $count1+1, 1) if $state == 0 && /^G[01]\b.*Z2\./;
+        ($line, $count2, $state) = ($_, $count2+1, 2) if $state == 1 && /^G[01]\b.*Z3\./;
     }
     say STDERR "Error naive ($count1)" if defined $num_matches && $count1 != $num_matches;
     return;
@@ -64,9 +50,12 @@ sub naive_impl
 sub non_greedy_impl
 {
     my ($line, $count1, $count2) = ('', 0, 0);
+    my $state = 0;
     for(@lines)
     {
-        next unless /^G[01](?![\d.]).*?Z([23])\./;
+        next unless $state < 2 && /^G[01](?![\d.]).*?Z([23])\./;
+        next if $state == 1 && $1 eq '2';
+        ++$state;
         $line = ($1 eq '2' ? (++$count1, $_) : (++$count2, $_));
     }
     say STDERR "Error non-greedy ($count1)" if defined $num_matches && $count1 != $num_matches;
@@ -76,9 +65,12 @@ sub non_greedy_impl
 sub greedy_impl
 {
     my ($line, $count1, $count2) = ('', 0, 0);
+    my $state = 0;
     for(@lines)
     {
-        next unless /^G[01](?![\d.]).*Z([23])\./;
+        next unless $state < 2 && /^G[01](?![\d.]).*Z([23])\./;
+        next if $state == 1 && $1 eq '2';
+        ++$state;
         $line = ($1 eq '2' ? (++$count1, $_) : (++$count2, $_));
     }
     say STDERR "Error greedy ($count1)" if defined $num_matches && $count1 != $num_matches;
@@ -88,9 +80,12 @@ sub greedy_impl
 sub comp_regex_impl
 {
     my ($line, $count1, $count2) = ('', 0, 0);
+    my $state = 0;
     for(@lines)
     {
-        next unless $_ =~ $regex;
+        next unless $state < 2 && $_ =~ $regex;
+        next if $state == 1 && $1 eq '2';
+        ++$state;
         $line = ($1 eq '2' ? (++$count1, $_) : (++$count2, $_));
     }
     say STDERR "Error comp regex ($count1)" if defined $num_matches && $count1 != $num_matches;
@@ -100,15 +95,18 @@ sub comp_regex_impl
 sub substr_impl
 {
     my ($line, $count1, $count2, $match, $pos) = ('', 0, 0, '', 0);
+    my $state = 0;
     for(@lines)
     {
+        next if $state >= 2;
         $match = substr( $_, 0, 2 );
         next unless $match eq 'G1' || $match eq 'G0';
         $match = substr( $_, 2, 1 );
         next if '0' le $match && $match le '9';
         next if -1 == ($pos = index( $_, 'Z', 3 ));
         $match = substr( $_, $pos+1, 1 );
-        next unless $match eq '2' || $match eq '3';
+        next unless ($match eq '2' && $state == 0) || ($match eq '3' && $state == 1);
+        ++$state;
         $line = ($match eq '2' ? (++$count1, $_) : (++$count2, $_));
     }
     say STDERR "Error substr ($count1)" if defined $num_matches && $count1 != $num_matches;
@@ -118,29 +116,20 @@ sub substr_impl
 sub index_impl
 {
     my ($line, $count1, $count2, $match, $pos) = ('', 0, 0, '', 0);
+    my $state = 0;
     for(@lines)
     {
+        next if $state >= 2;
         $match = substr( $_, 0, 2 );
         next unless $match eq 'G1' || $match eq 'G0';
         $match = substr( $_, 2, 1 );
         next if '0' le $match && $match le '9';
         next if -1 == ($pos = index( $_, 'Z', 3 ));
         $match = substr( $_, $pos+1, 1 );
-        next unless $match eq '2' || $match eq '3';
+        next unless ($match eq '2' && $state == 0) || ($match eq '3' && $state == 1);
+        ++$state;
         $line = ($match eq '2' ? (++$count1, $_) : (++$count2, $_));
     }
     say STDERR "Error index ($count1)" if defined $num_matches && $count1 != $num_matches;
-    return;
-}
-
-sub recdescent_impl
-{
-    my ($line, $count1, $count2, $match) = ('', 0, 0);
-    for(@lines)
-    {
-        next unless defined ($match = $rdp->startrule( $_ ));
-        $line = ($match eq '2' ? (++$count1, $_) : (++$count2, $_));
-    }
-    say STDERR "Error RecDescent Parser ($count1)" if defined $num_matches && $count1 != $num_matches;
     return;
 }
