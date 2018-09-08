@@ -20,16 +20,22 @@ GetOptions(
 my $num_matches = $opts{matches}; # = 167;
 
 my $regex = qr/^G[01](?![\d.]).*Z([23])\./;
+my @regexes = (
+    qr/^G[01](?![\d.]).*Z2\./,
+    qr/^G[01](?![\d.]).*Z3\./,
+);
 
 my $file = shift || 'target/rose.gcode' ;
 my @lines = do { open my $fh, '<', $file or die; <$fh> };
 my %tests = (
-    naive        => \&naive_impl,
-    'non-greedy' => \&non_greedy_impl,
-    'greedy'     => \&greedy_impl,
-    'comp_regex' => \&comp_regex_impl,
-    'substr'     => \&substr_impl,
-    'index'      => \&index_impl,
+    naive         => \&naive_impl,
+    'non-greedy'  => \&non_greedy_impl,
+    'greedy'      => \&greedy_impl,
+    'comp_regex'  => \&comp_regex_impl,
+    'substr'      => \&substr_impl,
+    'index'       => \&index_impl,
+    'comp_staged' => \&comp_staged_impl,
+    'staged'      => \&staged_impl,
 );
 
 Gcode::ParseSpeed::run( \%opts, \%tests, scalar(@lines) );
@@ -77,6 +83,32 @@ sub greedy_impl
     return;
 }
 
+sub staged_impl
+{
+    my ($line, $count1, $count2) = ('', 0, 0);
+    my $state = 0;
+    for(@lines)
+    {
+        next if $state > 1;
+        if($state == 0)
+        {
+            next unless /^G[01](?![\d.]).*Z2\./;
+            $state = 1;
+            $line = $_;
+            ++$count1;
+        }
+        elsif($state == 1)
+        {
+            next unless /^G[01](?![\d.]).*Z3\./;
+            $state = 2;
+            $line = $_;
+            ++$count2;
+        }
+    }
+    say STDERR "Error staged ($count1)" if defined $num_matches && $count1 != $num_matches;
+    return;
+}
+
 sub comp_regex_impl
 {
     my ($line, $count1, $count2) = ('', 0, 0);
@@ -89,6 +121,21 @@ sub comp_regex_impl
         $line = ($1 eq '2' ? (++$count1, $_) : (++$count2, $_));
     }
     say STDERR "Error comp regex ($count1)" if defined $num_matches && $count1 != $num_matches;
+    return;
+}
+
+sub comp_staged_impl
+{
+    my ($line, @counts) = ('', 0, 0);
+    my $state = 0;
+    for(@lines)
+    {
+        next unless $regexes[$state] && $_ =~ $regexes[$state];
+        ++$state;
+        ++$counts[$state];
+        $line = $_;
+    }
+    say STDERR "Error comp regex ($counts[0])" if defined $num_matches && $counts[0] != $num_matches;
     return;
 }
 
