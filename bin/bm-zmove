@@ -20,6 +20,7 @@ GetOptions(
 my $num_matches = $opts{matches}; # = 167;
 
 my $regex = qr/^G[01](?![\d.]).*Z/;
+my $pred = sub { return $_[0] =~ /^G[01](?![\d.]).*Z/; };
 
 my $file = shift || 'target/rose.gcode' ;
 my @lines = do { open my $fh, '<', $file or die; <$fh> };
@@ -30,6 +31,7 @@ my %tests = (
     'comp_regex' => \&comp_regex_impl,
     'substr'     => \&substr_impl,
     'index'      => \&index_impl,
+    'sub_greedy' => \&sub_greedy_impl,
 );
 
 Gcode::ParseSpeed::run( \%opts, \%tests, scalar(@lines) );
@@ -62,6 +64,17 @@ sub greedy_impl
     for(@lines)
     {
         ($line, $count) = ($_, $count+1) if /^G[01](?![\d.]).*Z/;
+    }
+    say STDERR "Error greedy ($count)" if defined $num_matches && $count != $num_matches;
+    return;
+}
+
+sub sub_greedy_impl
+{
+    my ($line, $count) = ('', 0);
+    for(@lines)
+    {
+        ($line, $count) = ($_, $count+1) if $pred->( $_ );
     }
     say STDERR "Error greedy ($count)" if defined $num_matches && $count != $num_matches;
     return;
