@@ -22,6 +22,7 @@ GetOptions(
 my $num_matches = $opts{matches}; # = 3;
 
 my $regex = qr/^G1(?![\d.]).*Z2\.\d00(?!\d)/;
+my $pred = sub { return $_[0] =~ /^G1(?![\d.]).*Z2\.\d00(?!\d)/; };
 
 my $file = shift || 'target/rose.gcode' ;
 my @lines = do { open my $fh, '<', $file or die; <$fh> };
@@ -35,6 +36,8 @@ my %tests = (
     argstr       => \&argstr_impl,
     'substr'     => \&substr_impl,
     'index'      => \&index_impl,
+    'sub_greedy' => \&sub_greedy_impl,
+    'scoped'     => \&scoped_impl,
 #    'split' =>      \&split_impl,
 );
 
@@ -70,6 +73,32 @@ sub greedy_impl
         ($line, $count) = ($_, $count+1) if /^G1(?![\d.]).*Z2\.\d00(?!\d)/;
     }
     say STDERR "Error greedy ($count)" if defined $num_matches && $count != $num_matches;
+    return;
+}
+
+sub sub_greedy_impl
+{
+    my ($line, $count) = ('', 0);
+    for(@lines)
+    {
+        ($line, $count) = ($_, $count+1) if $pred->( $_ );
+    }
+    say STDERR "Error sub greedy ($count)" if defined $num_matches && $count != $num_matches;
+    return;
+}
+
+sub scoped_impl
+{
+    my ($line, $count) = ('', 0);
+    for(@lines)
+    {
+        if(/^G1(?![\d.]).*Z2\.\d00(?!\d)/)
+        {
+            $line = $_;
+            ++$count;
+        }
+    }
+    say STDERR "Error scoped ($count)" if defined $num_matches && $count != $num_matches;
     return;
 }
 

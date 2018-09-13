@@ -25,6 +25,8 @@ my @regexes = (
     qr/^G[01](?![\d.]).*Z3\./,
 );
 
+my $pred = sub { return ()= ($_[0] =~ /^G[01](?![\d.]).*Z([23])\./); };
+
 my $file = shift || 'target/rose.gcode' ;
 my @lines = do { open my $fh, '<', $file or die; <$fh> };
 my %tests = (
@@ -36,6 +38,8 @@ my %tests = (
     'index'       => \&index_impl,
     'comp_staged' => \&comp_staged_impl,
     'staged'      => \&staged_impl,
+    'sub_greedy' => \&sub_greedy_impl,
+    'scoped'     => \&scoped_impl,
 );
 
 Gcode::ParseSpeed::run( \%opts, \%tests, scalar(@lines) );
@@ -78,6 +82,43 @@ sub greedy_impl
         next if $state == 1 && $1 eq '2';
         ++$state;
         $line = ($1 eq '2' ? (++$count1, $_) : (++$count2, $_));
+    }
+    say STDERR "Error greedy ($count1)" if defined $num_matches && $count1 != $num_matches;
+    return;
+}
+
+sub sub_greedy_impl
+{
+    my ($line, $count1, $count2,$match) = ('', 0, 0);
+    my $state = 0;
+    for(@lines)
+    {
+        next unless $state < 2 && ($match = $pred->( $_ ));
+        next if $state == 1 && $match eq '2';
+        $line = ($match eq '2' ? (++$state, ++$count1, $_) : (++$state, ++$count2, $_));
+    }
+    say STDERR "Error sub greedy ($count1)" if defined $num_matches && $count1 != $num_matches;
+    return;
+}
+
+sub scoped_impl
+{
+    my ($line, $count1, $count2) = ('', 0, 0);
+    my $state = 0;
+    for(@lines)
+    {
+        next unless $state < 2 && /^G[01](?![\d.]).*Z([23])\./;
+        next if $state == 1 && $1 eq '2';
+        ++$state;
+        $line = $_;
+        if($1 eq '2')
+        {
+            ++$count1;
+        }
+        else
+        {
+            ++$count2;
+        }
     }
     say STDERR "Error greedy ($count1)" if defined $num_matches && $count1 != $num_matches;
     return;
