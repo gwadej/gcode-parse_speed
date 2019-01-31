@@ -94,6 +94,10 @@ To install this module, run the following commands:
 	make
 	make test
 
+## RESULTS
+
+The results of my most recent run of the code can be found in the `results` directory.
+
 ## DEPENDENCIES
 
 None.
